@@ -16,8 +16,8 @@ INFLATION = 0.02  # Rate at which income, expenses should be increased. Default 
 
 
 def update_yearly_income_and_expenses(
-        income: float, expenses: float,
-        inflation: float = INFLATION
+    income: float, expenses: float,
+    inflation: float = INFLATION
 ) -> Tuple[float, float]:
     """
     Update the income and expenses at the end of a year.
@@ -25,15 +25,13 @@ def update_yearly_income_and_expenses(
     Parameters:
         income (float): Current income.
         expenses (float): Current expenses.
+        inflation (float): yearly inflation rate.
 
     Returns:
         Tuple[float, float]: Updated income and expenses.
     """
     income *= 1 + np.log(inflation)
-
-    # Assume expenses can increase by 0% to +10%
     expenses *= 1 + inflation
-
     return income, expenses
 
 
