@@ -9,6 +9,7 @@ from .initialisor import (
     generate_portfolio
 )
 
+print("Hello World.")
 
 # Constants:
 SALE_LOSS = 0.4  # fraction of value lost during sale.
