@@ -356,58 +356,6 @@ def get_cost_of_green_mortgage(
     return green_loan_value
 
 
-def adjust_tracked_variables(
-    row: pd.Series,
-    price_per_sqm: float = PRICE_PER_SQM,
-    energy_cost_per_sqm: float = ENERGY_COST_PER_SQM,
-    energy_expense_beta: float = 0.4,
-    ltv_beta: float = 0.1,
-    debt_to_income_beta: float = 0.05,
-) -> pd.Series:
-    """
-    Update values in the loan book.
-    row: pandas Series with mortgage details. Must have:
-        floor_plan, epc_label, risk_free_rate, property value multiplies and income
-    price_per_sqm (float): Mean property price per square meter.
-    energy_cost_per_sqm (float): The base energy rate per sqm.
-    loan_duration (int): duration of green loan.
-    energy_expense_beta: multiplies the energy_expense_to_income.
-        Note that a positive value means that a higher
-        energy-expense-to-income leads to a higher probability of default.
-    ltv_beta: multiplies the ltv.
-        Note that a positive value means that a higher ltv
-         leads to a higher probability of default.
-    debt_to_income_beta: multiplies the debt-to-income.
-        Note that a positive value means that a higher
-        debt-to-income leads to a higher probability of default.
-    return: updated loan book row.
-    """
-    row[PROPERTY_VALUE_KEY] = calculate_property_value(
-        row[EPC_LABEL_KEY], row[FLOOR_PLAN_KEY],
-        price_per_sqm=price_per_sqm,
-        value_multiplier=row[PROPERTY_MULTIPLIER_KEY]
-    )
-    row[ENERGY_EXPENSES_KEY] = calculate_energy_expenses(
-        epc_label=row[EPC_LABEL_KEY], floor_plan=row[FLOOR_PLAN_KEY],
-        energy_cost_per_sqm=energy_cost_per_sqm,
-    )
-    row[ENERGY_EXPENSE_TO_INCOME_KEY] = row[ENERGY_EXPENSES_KEY] / row[INCOME_KEY]
-    total_debt = row[LOAN_VALUE_KEY] + row[GREEN_VALUE_KEY]
-    row[LTV_KEY] = total_debt / row[PROPERTY_VALUE_KEY]
-    row[DEBT_TO_INCOME_KEY] = total_debt / row[INCOME_KEY]
-
-    row[PROB_OF_DEFAULT_KEY] = calculate_probability_of_default(
-        total_debt_to_income=row[DEBT_TO_INCOME_KEY],
-        energy_expenses_to_income=row[ENERGY_EXPENSE_TO_INCOME_KEY],
-        loan_to_value_ratio=row[LTV_KEY],
-        risk_free_rate=row[RISK_FREE_RATE_KEY],
-        energy_expense_beta=energy_expense_beta,
-        ltv_beta=ltv_beta,
-        debt_to_income_beta=debt_to_income_beta,
-    )
-    return row
-
-
 def issue_green_mortgage(
     row: pd.Series,
     b2a_renovation_cost: float = B2A_RENOVATION_COST,
@@ -450,7 +398,7 @@ def issue_green_mortgage(
         )
         return row
 
-    # TODO: Refactor avoiding lazy solution
+    # TODO: Refactor avoiding lazy solution for resetting values
     original_row = row.copy()
 
     # Assume EPC score improves by one level and property value consequently increases
@@ -466,15 +414,31 @@ def issue_green_mortgage(
     row[EPC_LABEL_KEY] = chr(
         ord(row[EPC_LABEL_KEY]) - 1
     ) if row[EPC_LABEL_KEY] not in ['A', 'B'] else 'A'
-    row = adjust_tracked_variables(
-        row, price_per_sqm=price_per_sqm,
+    row[PROPERTY_VALUE_KEY] = calculate_property_value(
+        row[EPC_LABEL_KEY], row[FLOOR_PLAN_KEY],
+        price_per_sqm=price_per_sqm,
+        value_multiplier=row[PROPERTY_MULTIPLIER_KEY]
+    )
+    row[ENERGY_EXPENSES_KEY] = calculate_energy_expenses(
+        epc_label=row[EPC_LABEL_KEY], floor_plan=row[FLOOR_PLAN_KEY],
         energy_cost_per_sqm=energy_cost_per_sqm,
+    )
+    row[ENERGY_EXPENSE_TO_INCOME_KEY] = row[ENERGY_EXPENSES_KEY] / row[INCOME_KEY]
+    total_debt = row[LOAN_VALUE_KEY] + row[GREEN_VALUE_KEY]
+    row[LTV_KEY] = total_debt / row[PROPERTY_VALUE_KEY]
+    row[DEBT_TO_INCOME_KEY] = total_debt / row[INCOME_KEY]
+
+    row[PROB_OF_DEFAULT_KEY] = calculate_probability_of_default(
+        total_debt_to_income=row[DEBT_TO_INCOME_KEY],
+        energy_expenses_to_income=row[ENERGY_EXPENSE_TO_INCOME_KEY],
+        loan_to_value_ratio=row[LTV_KEY],
+        risk_free_rate=row[RISK_FREE_RATE_KEY],
         energy_expense_beta=energy_expense_beta,
         ltv_beta=ltv_beta,
         debt_to_income_beta=debt_to_income_beta,
     )
 
-    # Inefficient
+    # RESET VALUES IF GREEN LOAN INCREASES THE PROB OF DEFAULT
     if is_deny:
         # DO not issue loan if it increases prob of default
         if original_row[PROB_OF_DEFAULT_KEY] < row[PROB_OF_DEFAULT_KEY]:
